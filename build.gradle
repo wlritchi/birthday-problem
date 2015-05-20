@@ -1,0 +1,28 @@
+apply plugin: 'application'
+
+mainClassName = 'BirthdayProblem'
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'com.google.guava:guava:18.0'
+    compile 'org.apache.commons:commons-lang3:3.4'
+}
+
+jar {
+    manifest {
+        attributes("Main-Class": "BirthdayProblem")
+    }
+}
+
+run.standardInput = System.in
+
+gradle.projectsEvaluated {
+    tasks.withType(JavaCompile) {
+        options.compilerArgs << '-Xlint:unchecked' << '-Xlint:deprecation'
+    }
+}
