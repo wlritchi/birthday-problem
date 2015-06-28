@@ -9,6 +9,7 @@ import java.util.Scanner;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
+import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.math.IntMath;
@@ -19,24 +20,26 @@ import static java.math.RoundingMode.FLOOR;
 
 public class BirthdayProblem
 {
+    private static final BigFract FIFTY_PERCENT = new BigFract(1, 2);
+    private static final BigFract NINETY_PERCENT = new BigFract(9, 10);
+    private static final int TWO_POW_30 = 1073741824;
+
     /**
      * Partial factorials for which n-r is greater than this value will be split for processing
      */
     private static final int PFACT_SPLIT_THRESHOLD = 1000;
-    private static final BigFract FIFTY_PERCENT = new BigFract(1, 2);
-    private static final BigFract NINETY_PERCENT = new BigFract(9, 10);
 
-    private final int numDays;
+    private final long numDays;
 
-    private final LoadingCache<Pair<Integer, Integer>, BigInteger> partialFactorial;
-    private final List<BigFract> probabilityOfMatch;
+    private final LoadingCache<Pair<Long, Long>, BigInteger> partialFactorial;
+    private final LoadingCache<Long, BigFract> probabilityOfMatch;
     
-    public BirthdayProblem(int numDays)
+    public BirthdayProblem(long numDays)
     {
         this.numDays = numDays;
-        partialFactorial = new NeighbourLoadingCache<Pair<Integer, Integer>, Integer, BigInteger>(new Pair.Impl<Integer, Integer>(1, 0), BigInteger.ONE, PFactMetric.getInstance(), Comparator.<Integer>naturalOrder())
+        partialFactorial = new NeighbourLoadingCache<Pair<Long, Long>, Long, BigInteger>(new Pair.Impl<Long, Long>(1L, 0L), BigInteger.ONE, PFactMetric.getInstance(), Comparator.<Long>naturalOrder())
             {
-                private BigInteger getRecursive(int n, int r)
+                private BigInteger getRecursive(long n, long r)
                 {
                     try
                     {
@@ -50,12 +53,12 @@ public class BirthdayProblem
                     }
                 }
 
-                public BigInteger generateFromNeighbour(Pair<Integer, Integer> neighbourKey, BigInteger neighbourValue, Pair<Integer, Integer> newKey)
+                public BigInteger generateFromNeighbour(Pair<Long, Long> neighbourKey, BigInteger neighbourValue, Pair<Long, Long> newKey)
                 {
-                    int a = newKey.first();
-                    int b = newKey.second();
-                    int c = neighbourKey.first();
-                    int d = neighbourKey.second();
+                    long a = newKey.first();
+                    long b = newKey.second();
+                    long c = neighbourKey.first();
+                    long d = neighbourKey.second();
 
                     //System.out.println("  (" + a + "," + b + "):" + (a - b));
 
@@ -98,7 +101,7 @@ public class BirthdayProblem
                     return acc;
                 }
             };
-        probabilityOfMatch = new LazyList<>(new CacheLoader<Integer, BigFract>()
+        probabilityOfMatch = CacheBuilder.newBuilder().build(new CacheLoader<Long, BigFract>()
             {
                 private String printBigInt(BigInteger big)
                 {
@@ -110,12 +113,18 @@ public class BirthdayProblem
                     return s.substring(0, 1) + "." + s.substring(1, 10) + " × 10^" + (s.length() - 1);
                 }
 
-                public BigFract load(Integer numPeople)
+                public BigFract load(Long numPeople)
                 {
                     try
                     {
                         BigInteger d_nfact = partialFactorial.get(new Pair.Impl<>(numDays, numDays - numPeople));
-                        BigInteger den = BigInteger.valueOf(numDays).pow(numPeople);
+                        BigInteger den = BigInteger.valueOf(numDays);
+                        while (numPeople > TWO_POW_30)
+                        {
+                            numPeople >>= 30;
+                            den = den.pow(TWO_POW_30);
+                        }
+                        den = den.pow((int)(long)numPeople);
                         BigInteger num = den.subtract(d_nfact);
                         return new BigFract(num, den);
                     }
@@ -126,42 +135,66 @@ public class BirthdayProblem
                         return null;
                     }
                 }
-            }, numDays + 1);
+            });
     }
 
     public static void main(String[] args)
     {
-        Scanner s = new Scanner(System.in);
-        System.out.print("Number of days? ");
-        BirthdayProblem bp = new BirthdayProblem(s.nextInt());
-        s.nextLine();
-        System.out.print("Number of people? [find] ");
-        String line = s.nextLine().trim();
-        if (line.isEmpty())
+        try
         {
-            System.out.println("50% probability of match after " + bp.peopleForProbability(FIFTY_PERCENT) + " people");
-            System.out.println("90% probability of match after " + bp.peopleForProbability(NINETY_PERCENT) + " people");
+            Scanner s = new Scanner(System.in);
+            System.out.print("Number of days? ");
+            BirthdayProblem bp = new BirthdayProblem(s.nextLong());
+            s.nextLine();
+            System.out.print("Number of people? [find] ");
+            String line = s.nextLine().trim();
+            if (line.isEmpty())
+            {
+                System.out.println("50% probability of match after " + bp.peopleForProbability(FIFTY_PERCENT) + " people");
+                System.out.println("90% probability of match after " + bp.peopleForProbability(NINETY_PERCENT) + " people");
+            }
+            else
+            {
+                System.out.println("Probability of match: " + bp.probabilityOfMatch.get(new Long(line)).multiply(100).toPositionalString(1) + "%");
+            }
         }
-        else
+        catch (ExecutionException e)
         {
-            System.out.println("Probability of match: " + bp.probabilityOfMatch.get(new Integer(line)).multiply(100).toPositionalString(1) + "%");
+            e.printStackTrace();
         }
     }
 
-    private int peopleForProbability(BigFract needle)
+    private long peopleForProbability(BigFract needle) throws ExecutionException
     {
-        int index = Collections.binarySearch(probabilityOfMatch, needle);
-        if (index < 0)
+        long low = 0;
+        long high = numDays;
+
+        while (low <= high)
         {
-            index = -1 - index;
+            long mid = (low + high) >>> 1;
+            System.out.println("Testing " + mid + "...");
+            BigFract midVal = probabilityOfMatch.get(mid);
+            int cmp = midVal.compareTo(needle);
+            if (cmp < 0)
+            {
+                low = mid + 1;
+            }
+            else if (cmp > 0)
+            {
+                high = mid - 1;
+            }
+            else
+            {
+                return mid;
+            }
         }
-        return index;
+        return low;
     }
 
     /**
      * Computes n! divided by r!; that is, the product of all numbers from r+1 to n, inclusive.
      */
-    private static BigInteger partialFactorial(int n, int r)
+    private static BigInteger partialFactorial(long n, long r)
     {
         //System.out.println("[" + n + "," + r + "]:" + (n - r));
         if (r >= n)
@@ -173,9 +206,14 @@ public class BirthdayProblem
             throw new IllegalArgumentException("r(" + r + ") must be >= 0");
         }
 
-        ArrayList<BigInteger> bignums = new ArrayList<BigInteger>(IntMath.divide(n * IntMath.log2(n, CEILING), Long.SIZE, CEILING));
+        long arrayListSize = LongMath.divide(n * LongMath.log2(n, CEILING), Long.SIZE, CEILING);
+        if (arrayListSize > Integer.MAX_VALUE)
+        {
+            throw new RuntimeException("Required array list size too large");
+        }
+        ArrayList<BigInteger> bignums = new ArrayList<BigInteger>((int)arrayListSize);
 
-        int startingNumber = r + 1;
+        long startingNumber = r + 1;
         long product = 1;
         int shift = 0;
         int productBits = 0;
@@ -223,7 +261,7 @@ public class BirthdayProblem
         }
     }
 
-    private static class PFactMetric implements Metric<Pair<Integer, Integer>, Integer>
+    private static class PFactMetric implements Metric<Pair<Long, Long>, Long>
     {
         private static final PFactMetric INSTANCE = new PFactMetric();
 
@@ -236,12 +274,12 @@ public class BirthdayProblem
             return INSTANCE;
         }
 
-        public Integer distance(Pair<Integer, Integer> point1, Pair<Integer, Integer> point2)
+        public Long distance(Pair<Long, Long> point1, Pair<Long, Long> point2)
         {
-            int a = point1.first();
-            int b = point1.second();
-            int c = point2.first();
-            int d = point2.second();
+            long a = point1.first();
+            long b = point1.second();
+            long c = point2.first();
+            long d = point2.second();
 
             if (b > c || d > a) // no overlap
             {
