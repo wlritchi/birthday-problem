@@ -167,12 +167,29 @@ public class BirthdayProblem
     private long peopleForProbability(BigFract needle) throws ExecutionException
     {
         long low = 0;
-        long high = numDays;
-
+        long high = 64;
+        while (true)
+        {
+            BigFract highVal = probabilityOfMatch.get(high);
+            int cmp = highVal.compareTo(needle);
+            if (cmp < 0)
+            {
+                low = high + 1;
+                high = high * 2;
+            }
+            else if (cmp > 0)
+            {
+                high = high - 1;
+                break;
+            }
+            else
+            {
+                return high;
+            }
+        }
         while (low <= high)
         {
             long mid = (low + high) >>> 1;
-            System.out.println("Testing " + mid + "...");
             BigFract midVal = probabilityOfMatch.get(mid);
             int cmp = midVal.compareTo(needle);
             if (cmp < 0)
