@@ -6,6 +6,9 @@ public class BigFract implements Comparable<BigFract>
 {
     private static final BigInteger TWO = BigInteger.valueOf(2);
 
+    public static final BigFract ZERO = new BigFract(0, 1);
+    public static final BigFract ONE = new BigFract(1, 1);
+
     private final BigInteger numerator;
     private final BigInteger denominator;
 
@@ -17,6 +20,29 @@ public class BigFract implements Comparable<BigFract>
     {
         this.numerator = numerator;
         this.denominator = denominator;
+    }
+
+    public BigFract negate()
+    {
+        return new BigFract(numerator.negate(), denominator);
+    }
+
+    public BigFract reciprocal()
+    {
+        return new BigFract(denominator, numerator);
+    }
+
+    public BigFract add(long value)
+    {
+        return add(BigInteger.valueOf(value));
+    }
+    public BigFract add(BigInteger value)
+    {
+        return new BigFract(numerator.add(denominator.multiply(value)), denominator);
+    }
+    public BigFract add(BigFract value)
+    {
+        return new BigFract(numerator.multiply(value.denominator).add(denominator.multiply(value.numerator)), denominator.multiply(value.denominator));
     }
 
     public BigFract multiply(long value)
