@@ -223,7 +223,7 @@ public class BirthdayProblem
             throw new IllegalArgumentException("r(" + r + ") must be >= 0");
         }
 
-        long arrayListSize = LongMath.divide(n * LongMath.log2(n, CEILING), Long.SIZE, CEILING);
+        long arrayListSize = LongMath.divide((n - r) * LongMath.log2(n, CEILING), Long.SIZE, CEILING);
         if (arrayListSize > Integer.MAX_VALUE)
         {
             throw new RuntimeException("Required array list size too large");
